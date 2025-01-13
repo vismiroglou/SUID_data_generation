@@ -143,12 +143,14 @@ def get_degraded_img(img:np.ndarray, bl, tm):
 
 
 if __name__ == '__main__':
-    input_img_path = '/home/vismiroglou/datasets/deepBlur/clean/0007.png'
-    # input_img_path = '/home/vismiroglou/src/SUD/3008896-1289291431.jpg'
-    uw_img_path = '/home/vismiroglou/datasets/deepBlur/clay/01/0020.png'
-    # uw_img_path = '/home/vismiroglou/datasets/brackishMOT/BrackishMOT/train/brackishMOT-01/img1/000001.jpg'
-    # uw_img_path = '/home/vismiroglou/datasets/benthicnet/Tasmania201808/r20180822_204918_SS05_beagle_shelf_10/PR_20180822_213745_744_LC16.jpg'
-    # uw_img_path = '/home/vismiroglou/src/SUD/D328_140_125_0004_600-2230316603.jpg'
+    from argparse import ArgumentParser
+    ap = ArgumentParser()
+    ap.add_argument('--input_img', type=str, required=True)
+    ap.add_argument('--uw_img', type=str, required=True)
+    args = ap.parse_args()
+
+    input_img_path = args.input_img
+    uw_img_path = args.uw_img
 
     img = cv2.imread(input_img_path)
     uw_img = cv2.imread(uw_img_path)
@@ -162,7 +164,6 @@ if __name__ == '__main__':
     ax[0,1].set_axis_off()
 
     bl = calc_backlight(uw_img)
-    exit()
     # ax[0,2].imshow(np.tile(np.array([bl[2], bl[1], bl[0]]), (2,2,1)))
     # ax[0,2].set_title('Backlight color')
     # ax[0,2].set_axis_off()
@@ -179,4 +180,4 @@ if __name__ == '__main__':
     ax[1,1].imshow(cv2.cvtColor((dimg*255).astype(np.uint8), cv2.COLOR_BGR2RGB))
     ax[1,1].set_title('Degraded image')
     ax[1,1].set_axis_off()
-    fig.savefig('figure_5.png')   
+    fig.savefig('figure_4.png')   
