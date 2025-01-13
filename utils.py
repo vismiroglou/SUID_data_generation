@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
+
 '''Notes:
 THis method does not use the dark channel prior in its original format because
 it correctly assumes that in underwater environments not all channels are equal.
@@ -49,6 +49,12 @@ def calc_backlight(img, thr=10):
 
     bl = sorted_pixels[sorted_pixels.shape[0]//4]/255
 
+    # Add an intensity threshold
+    # This is not done in the paper. In fact, the intensity of the backlight has a very large effect on the final result. 
+    # High intensity values of the backlight will inevitably result in a very dark transmission map, which in turn means that the
+    # shapes of the underwater image will overpower the image we wish to degrade
+    # if np.mean(bl) > 0.4:
+    #     bl = bl - (np.mean(bl) - 0.4)
     # This is the naive version where we choose the highest intensity pixel
     # img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # max_loc = np.argmax(img_gray)
@@ -84,51 +90,33 @@ def get_trans_map(img, bl):
         return green_red_coeff, blue_red_coeff
     
     # Calculate the transmission map
-    size = (3, 3)
+    size = (9, 9)
     shape = cv2.MORPH_RECT
     kernel = cv2.getStructuringElement(shape, size)
 
+    # According to the paper, the minimum of each channel in an area Omega is calculated.
+    # In the case of the red channel, the minimum of the inverse is taken.
     min_b = cv2.erode(img[:,:,0], kernel)/255
     min_g = cv2.erode(img[:,:,1], kernel)/255
     min_r = cv2.erode((255-img[:,:,2]), kernel)/255
 
-    # j_red = np.min(np.array([min_b, min_g, 1-min_r]), axis=0)
-
     b_map = min_b / (1 - bl[0] + 1e-6)
     g_map = min_g / (1 - bl[1] + 1e-6)
     r_map = min_r / (1 - bl[2] + 1e-6)
-
-    print(np.min(b_map), np.min(g_map), np.min(r_map))
     
     # At this point a choice needs to be made between clipping and normalizing. The paper does not specify this.
-    # b_map = cv2.normalize(b_map, None, 0, 1, cv2.NORM_MINMAX)
-    # g_map = cv2.normalize(g_map, None, 0, 1, cv2.NORM_MINMAX)
-    # r_map = cv2.normalize(r_map, None, 0, 1, cv2.NORM_MINMAX)
+    b_map = cv2.normalize(b_map, None, 0, 1, cv2.NORM_MINMAX)
+    g_map = cv2.normalize(g_map, None, 0, 1, cv2.NORM_MINMAX)
+    r_map = cv2.normalize(r_map, None, 0, 1, cv2.NORM_MINMAX)
 
-    b_map = np.clip(b_map, 0, 1)
-    g_map = np.clip(g_map, 0, 1)
-    r_map = np.clip(r_map, 0, 1)
+    # b_map = np.clip(b_map, 0, 1)
+    # g_map = np.clip(g_map, 0, 1)
+    # r_map = np.clip(r_map, 0, 1)
     
     green_red_coeff, blue_red_coeff = calc_coeffs(bl[0], bl[1], bl[2])
     tm_r = 1 - np.minimum(g_map, np.minimum(b_map,r_map))
     tm_g = tm_r ** green_red_coeff
     tm_b = tm_r ** blue_red_coeff
-    # tm_r = np.full(r_map.shape, T_R)
-    # tm_g = np.full(g_map.shape, T_G)
-    # tm_b = np.full(b_map.shape, T_B)
-    
-    # fig1, ax1 = plt.subplots(1,3, figsize=(10,3))
-    # ax1[0].imshow(tm_b, cmap='gray')
-    # ax1[0].set_title('Blue transmission map')
-    # ax1[0].set_axis_off()
-    # ax1[1].imshow(tm_g, cmap='gray')
-    # ax1[1].set_title('Green transmission map')
-    # ax1[1].set_axis_off()
-    # ax1[2].imshow(tm_r, cmap='gray')
-    # ax1[2].set_title('Red transmission map')
-    # ax1[2].set_axis_off()
-    # fig1.tight_layout()
-    # fig1.savefig('transmission_maps.png')
 
     tm = np.array([tm_b, tm_g, tm_r]).transpose(1,2,0)
 
@@ -139,45 +127,4 @@ def get_degraded_img(img:np.ndarray, bl, tm):
     # BGR
     dimg = img.astype(np.float32) / 255
     dimg = dimg * tm + bl * (1 - tm)
-    return dimg
-
-
-if __name__ == '__main__':
-    from argparse import ArgumentParser
-    ap = ArgumentParser()
-    ap.add_argument('--input_img', type=str, required=True)
-    ap.add_argument('--uw_img', type=str, required=True)
-    args = ap.parse_args()
-
-    input_img_path = args.input_img
-    uw_img_path = args.uw_img
-
-    img = cv2.imread(input_img_path)
-    uw_img = cv2.imread(uw_img_path)
-
-    fig, ax = plt.subplots(2, 2)
-    ax[0,0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    ax[0,0].set_title('Input image')
-    ax[0,0].set_axis_off()
-    ax[0,1].imshow(cv2.cvtColor(uw_img, cv2.COLOR_BGR2RGB))
-    ax[0,1].set_title('Underwater image')
-    ax[0,1].set_axis_off()
-
-    bl = calc_backlight(uw_img)
-    # ax[0,2].imshow(np.tile(np.array([bl[2], bl[1], bl[0]]), (2,2,1)))
-    # ax[0,2].set_title('Backlight color')
-    # ax[0,2].set_axis_off()
-    
- 
-    tm = get_trans_map(uw_img, bl)
-    ax[1,0].imshow(cv2.cvtColor(tm.astype(np.float32), cv2.COLOR_BGR2RGB))
-    ax[1,0].set_title('Transmission map')
-    ax[1,0].set_axis_off()
-    
-
-    img = cv2.resize(img, (uw_img.shape[1], uw_img.shape[0]))
-    dimg = get_degraded_img(img, bl, tm)
-    ax[1,1].imshow(cv2.cvtColor((dimg*255).astype(np.uint8), cv2.COLOR_BGR2RGB))
-    ax[1,1].set_title('Degraded image')
-    ax[1,1].set_axis_off()
-    fig.savefig('figure_4.png')   
+    return dimg 
