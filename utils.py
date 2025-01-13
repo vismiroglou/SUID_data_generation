@@ -16,15 +16,48 @@ T_R = 0.20
 T_G = 0.55
 T_B = 0.72
 
-def calc_backlight(img):
+def calc_backlight(img, thr=10):
     # Calculate the backlight
-    # TODO: Do this the proper way. this is an approximation. Backlight is expected to only affect the hue and not the contrast anyway.
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    max_loc = np.argmax(img_gray)
-    max_loc = np.unravel_index(max_loc, img_gray.shape)
-    bl = img[max_loc]/255
-    # print(bl)
+    region = img
+
+    # Split the image into 4 parts until the number of pixels is below the threshold
+    while region[:,:,0].ravel().shape[0] > thr:
+        height, width, _ = region.shape
+
+        center_y, center_x = height // 2, width // 2
+
+        top_left = region[:center_y, :center_x, :]
+        top_right = region[:center_y, center_x:, :]
+        bottom_left = region[center_y:, :center_x, :]
+        bottom_right = region[center_y:, center_x:, :]
+
+        high_score = 0
+        for subregion in [top_left, top_right, bottom_left, bottom_right]:
+            # Calculate the score for each region as the difference between the mean and the standard deviation
+            score = np.mean(subregion) - np.std(subregion)
+            if score > high_score:
+                high_score = score
+                region = subregion
+    
+    # Reshape the region to get the pixels and sort in descending order based on their intensity
+    h, w, c = region.shape
+    pixels = region.reshape(h * w, c)
+    intensities = np.sum(pixels, axis=1)
+
+    sorted_indices = np.argsort(-intensities)
+    sorted_pixels = pixels[sorted_indices]
+
+    bl = sorted_pixels[sorted_pixels.shape[0]//4]/255
+
+    # This is the naive version where we choose the highest intensity pixel
+    # img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # max_loc = np.argmax(img_gray)
+    # max_loc = np.unravel_index(max_loc, img_gray.shape)
+    # bl = img[max_loc]/255
+    
+    # This is using an example value from the paper
     # bl = [B_B, B_G, B_R]
+
     print('Backlight:', bl, '\nBacklight Intensity:', np.mean(bl))
     return bl
 
@@ -112,10 +145,10 @@ def get_degraded_img(img:np.ndarray, bl, tm):
 if __name__ == '__main__':
     input_img_path = '/home/vismiroglou/datasets/deepBlur/clean/0007.png'
     # input_img_path = '/home/vismiroglou/src/SUD/3008896-1289291431.jpg'
-    # uw_img_path = '/home/vismiroglou/datasets/deepBlur/clay/01/0020.png'
+    uw_img_path = '/home/vismiroglou/datasets/deepBlur/clay/01/0020.png'
     # uw_img_path = '/home/vismiroglou/datasets/brackishMOT/BrackishMOT/train/brackishMOT-01/img1/000001.jpg'
     # uw_img_path = '/home/vismiroglou/datasets/benthicnet/Tasmania201808/r20180822_204918_SS05_beagle_shelf_10/PR_20180822_213745_744_LC16.jpg'
-    uw_img_path = '/home/vismiroglou/src/SUD/D328_140_125_0004_600-2230316603.jpg'
+    # uw_img_path = '/home/vismiroglou/src/SUD/D328_140_125_0004_600-2230316603.jpg'
 
     img = cv2.imread(input_img_path)
     uw_img = cv2.imread(uw_img_path)
