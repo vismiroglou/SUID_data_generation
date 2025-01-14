@@ -8,7 +8,7 @@ def calc_kernel_size(img:np.ndarray) -> int:
     don't overpower the image we wish to degrade.
     '''
     num_pixels = img.shape[0] * img.shape[1]
-    kernel_size = int(np.sqrt(num_pixels)/10)
+    kernel_size = int(np.sqrt(num_pixels)/20)
     print('Kernel size:', kernel_size, 'x', kernel_size)
     return kernel_size
 
